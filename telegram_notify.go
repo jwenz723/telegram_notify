@@ -10,6 +10,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"github.com/fsnotify/fsnotify"
+	"strings"
+	"path/filepath"
 )
 
 // GetUpdates is a struct to be used with the Telegram /getUpdates endpoint
@@ -331,8 +334,8 @@ var (
 
 func init() {
 	flag.StringVar(&chatID, "chatID", "", "specify the id of the Telegram chat that messages should be sent to")
-	flag.StringVar(&filePath, "filePath", "", "specify the path to the file to be uploaded")
-	flag.StringVar(&mode, "mode", "", "specify 'getChatID', 'sendText', 'sendPhoto', or 'sendVideo'")
+	flag.StringVar(&filePath, "filePath", "", "specify the path to the file to be uploaded. For mode 'watcher' this specifies the directory to watch.")
+	flag.StringVar(&mode, "mode", "", "specify 'getChatID', 'sendText', 'sendPhoto', 'sendVideo', or 'watcher'")
 	flag.StringVar(&text, "text", "", "specify text to send")
 	flag.StringVar(&botToken, "botToken", "", "specify the telegram bot api token to be used for sending messages")
 	flag.Parse()
@@ -393,6 +396,57 @@ func main() {
 			} else {
 				fmt.Println("Photo sent")
 			}
+		} else if mode == "watcher" {
+			if filePath == "" {
+				fmt.Printf("Must specify filePath flag!\n")
+				return
+			}
+
+			watcher, err := fsnotify.NewWatcher()
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer watcher.Close()
+
+			done := make(chan struct{})
+			go func() {
+				armed := false
+
+				for {
+					select {
+					case event := <-watcher.Events:
+						if event.Op == fsnotify.Create {
+							if strings.HasSuffix(event.Name, ".jpg") {
+								if armed {
+									log.Printf("file created: %s\n", event.Name)
+									err := sendPhoto(botToken, chatID, event.Name, text)
+									if err != nil {
+										fmt.Printf("Error occurred in watcher sendPhoto() -> %s", err)
+									} else {
+										fmt.Println("Photo sent")
+									}
+								}
+							} else if event.Name == filepath.Join(filePath, "motionstarted") {
+								armed = true
+								log.Println("armed")
+							}
+						} else if event.Op == fsnotify.Remove {
+							if event.Name == filepath.Join(filePath, "motionstarted") {
+								armed = false
+								log.Println("disarmed")
+							}
+						}
+					case err := <-watcher.Errors:
+						log.Println("error:", err)
+					}
+				}
+			}()
+
+			err = watcher.Add(filePath)
+			if err != nil {
+				log.Fatal(err)
+			}
+			<-done
 		} else {
 			fmt.Println("invalid mode parameter. use -help to view available values.")
 		}
