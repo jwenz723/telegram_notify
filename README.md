@@ -7,6 +7,13 @@ This repo contains a simple Go application that can be used for sending telegram
 2. Place the executable somewhere you can run it
 3. Run one of the following commands:
 
+* Watch a directory and automatically send all .jpg files to a Telegram chat as they are created. Note that .jpg files will
+only be sent while the \<path to directory to watch\>/motionstarted file exists. You should create this file when motion starts and delete this
+file after motion has stopped.
+    * Command:
+        ```
+        telegram_notify -botToken <my Telegram bot token here> -chatID <telegram chat ID> -mode watcher -filePath <path to directory to watch>
+        ```
 * Get the chat ID of a Telegram chat that your Telegram Bot is in
     * Command:
         ```
